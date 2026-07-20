@@ -1,0 +1,4 @@
+v2
+1.analytics agent
+2.vis agent
+3.handling complex queries (rag and sql)

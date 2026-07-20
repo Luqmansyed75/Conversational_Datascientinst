@@ -1,0 +1,32 @@
+# Groq LLM
+groq
+langchain-groq
+
+# LangChain core
+langchain
+langchain-core
+langchain-community
+
+# LangGraph (orchestration)
+langgraph
+
+# RAG - Vector Store
+chromadb
+
+# RAG - Embeddings
+sentence-transformers
+
+# PDF reading
+pypdf
+
+# SQLite (built-in, no install needed)
+
+# Streamlit UI
+streamlit
+
+# Environment variables
+python-dotenv
+
+# Data
+pandas
+tabulate
