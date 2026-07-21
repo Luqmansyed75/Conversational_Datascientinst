@@ -29,11 +29,13 @@ Question: {question}
 Data collected so far:
 SQL Results : {sql_data}
 RAG Context : {rag_context}
-
+    
 Rules:
-1. If SQL Results contains the data needed AND RAG Context contains the document details needed (or if all needed info is present), reply "ready".
-2. If RAG Context is missing or empty, but document info (policy, warranty, terms) is needed, reply "needs_rag".
-3. If SQL Results is missing or empty, but database info (sales, counts, customers) is needed, reply "needs_sql".
+1.compare the data present with the query and If you think the present data is sufficient to answer the question, reply "ready".
+2. If SQL Results contains the data needed AND RAG Context contains the document details needed (or if all needed info is present), reply "ready".
+3. If RAG Context is missing or empty, but document info (policy, warranty, terms) is needed, reply "needs_rag".
+4. If SQL Results is missing or empty, but database info (sales, counts, customers) is needed, reply "needs_sql".
+
 
 Reply with ONLY one word: ready, needs_sql, or needs_rag. No extra text.
 """

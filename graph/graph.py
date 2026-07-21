@@ -16,6 +16,8 @@ def router_node(state: AgentState) -> AgentState:
 
     if iteration >= MAX_ITERATIONS:
         curr_intent = "ready"
+    elif has_rag and has_sql:
+        curr_intent = "ready"
     elif has_rag or has_sql:
         # Some data already collected — check if it's sufficient
         curr_intent = check_sufficiency(
@@ -29,8 +31,8 @@ def router_node(state: AgentState) -> AgentState:
 
     state["intent"] = curr_intent
     
-    # Update tracking history
-    history = list(state.get("intent_history", []))
+    # Safely retrieve/append history
+    history = list(state.get("intent_history") or [])
     history.append(curr_intent)
     state["intent_history"] = history
 
@@ -72,7 +74,7 @@ def response_node(state: AgentState) -> AgentState:
 
 
 def route_edge(state: AgentState) -> str:
-    intent = state.get("intent")
+    intent = state.get("intent")  # intent is a single string now ("sql", "needs_rag", etc.)
     if intent in ("rag", "needs_rag"):
         return "rag"
     elif intent in ("sql", "needs_sql"):
@@ -111,7 +113,7 @@ def run(question: str, chat_history: list = []) -> list:
     state = app.invoke({
         "question":       question,
         "intent":         None,
-        "intent_history": [],
+        "intent_history": [],       # Initialized intent_history
         "rag_context":    None,
         "sql_data":       None,
         "final_answer":   None,

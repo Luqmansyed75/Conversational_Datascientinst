@@ -1,2 +1,2 @@
-# from rag.retriever import retrieve
-# from rag.ingest import ingest
+from rag.retriever import retrieve
+from rag.ingest import ingest
