@@ -30,3 +30,6 @@ python-dotenv
 # Data
 pandas
 tabulate
+
+# Visualization
+plotly
