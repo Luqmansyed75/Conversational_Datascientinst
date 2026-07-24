@@ -101,7 +101,7 @@ def execute_sql(sql: str) -> list[dict]:
 
 def run_sql_agent(question: str) -> dict:
     schema  = get_schema()
-    sql     = generate_sql(question, schema)
+    sql     = generate_sql(question, schema)#write the query
     results = execute_sql(sql)
     return {"sql": sql, "results": results}
 

@@ -5,13 +5,14 @@ from agents.router         import route, check_sufficiency
 from agents.rag_agent      import run_rag_agent
 from agents.sql_agent      import run_sql_agent
 from agents.response_agent import generate_response
+from agents.vis_agent      import run_viz_agent
 
 MAX_ITERATIONS = 3
 
 
 def router_node(state: AgentState) -> AgentState:
-    has_rag   = bool(state.get("rag_context")) 
-    has_sql   = bool(state.get("sql_data"))   
+    has_rag   = bool(state.get("rag_context"))
+    has_sql   = bool(state.get("sql_data"))
     iteration = state.get("iteration", 0)
 
     if iteration >= MAX_ITERATIONS:
@@ -19,24 +20,20 @@ def router_node(state: AgentState) -> AgentState:
     elif has_rag and has_sql:
         curr_intent = "ready"
     elif has_rag or has_sql:
-        # Some data already collected — check if it's sufficient
         curr_intent = check_sufficiency(
             state["question"],
-            state.get("sql_data"),
-            state.get("rag_context"),
+            state.get("sql_data", {}).get("results"),
+            state.get("rag_context", {}).get("context") if state.get("rag_context") else None,
         )
     else:
-        # First visit — classify intent
         curr_intent = route(state["question"])
 
     state["intent"] = curr_intent
-    
-    # Safely retrieve/append history
+
     history = list(state.get("intent_history") or [])
     history.append(curr_intent)
     state["intent_history"] = history
-
-    state["iteration"] = iteration + 1
+    state["iteration"]      = iteration + 1
     return state
 
 
@@ -67,20 +64,42 @@ def response_node(state: AgentState) -> AgentState:
         source = "general"
         data   = None
 
-    state["final_answer"] = generate_response(state["question"], source, data)
+    # One LLM call → returns both answer text + needs_chart decision
+    output = generate_response(state["question"], source, data)
+
+    state["final_answer"] = output.answer
+    state["needs_chart"]  = output.needs_chart
+
     state["chat_history"].append({"role": "user",      "content": state["question"]})
-    state["chat_history"].append({"role": "assistant",  "content": state["final_answer"]})
+    state["chat_history"].append({"role": "assistant",  "content": output.answer})
+    return state
+
+
+def viz_node(state: AgentState) -> AgentState:
+    """Runs only when response_node sets needs_chart=True and sql_data exists."""
+    fig = run_viz_agent(
+        question = state["question"],
+        sql_data = state["sql_data"],
+    )
+    state["chart_figure"] = fig
     return state
 
 
 def route_edge(state: AgentState) -> str:
-    intent = state.get("intent")  # intent is a single string now ("sql", "needs_rag", etc.)
+    intent = state.get("intent")
     if intent in ("rag", "needs_rag"):
         return "rag"
     elif intent in ("sql", "needs_sql"):
         return "sql"
     else:
-        return "response"   # "ready" / "general"
+        return "response"
+
+
+def viz_edge(state: AgentState) -> str:
+    """Routes to viz_node if chart is needed, otherwise ends."""
+    if state.get("needs_chart") :
+        return "viz"
+    return END
 
 
 def build_graph():
@@ -90,6 +109,7 @@ def build_graph():
     graph.add_node("rag",      rag_node)
     graph.add_node("sql",      sql_node)
     graph.add_node("response", response_node)
+    graph.add_node("viz",      viz_node)
 
     graph.add_edge(START, "router")
 
@@ -99,39 +119,55 @@ def build_graph():
         {"rag": "rag", "sql": "sql", "response": "response"},
     )
 
-    # Feedback loop — return to router to check sufficiency
     graph.add_edge("rag", "router")
     graph.add_edge("sql", "router")
-    graph.add_edge("response", END)
+
+    # After response: go to viz or end
+    graph.add_conditional_edges(
+        "response",
+        viz_edge,
+        {"viz": "viz", END: END},
+    )
+
+    graph.add_edge("viz", END)
 
     return graph.compile()
 
 
 app = build_graph()
 
-def run(question: str, chat_history: list = []) -> list:
+
+def run(question: str, chat_history: list = []) -> dict:
     state = app.invoke({
         "question":       question,
         "intent":         None,
-        "intent_history": [],       # Initialized intent_history
+        "intent_history": [],
         "rag_context":    None,
         "sql_data":       None,
         "final_answer":   None,
+        "needs_chart":    None,
+        "chart_figure":   None,
         "chat_history":   chat_history,
         "iteration":      0,
     })
-    return [state["iteration"], state["rag_context"], state["sql_data"], state["final_answer"], state["intent_history"]]
+    return {
+        "answer":        state["final_answer"],
+        "needs_chart":   state["needs_chart"],
+        "chart_figure":  state["chart_figure"],
+        "intent_history": state["intent_history"],
+    }
 
 
 if __name__ == "__main__":
     tests = [
-        "What is the return policy for the category with the highest sales?"
+        "Show me the top 5 costly products of our company in a bar chart",
     ]
 
     for q in tests:
         print(f"\nQ: {q}")
-        a = run(q)
-        for item in a:
-            print(item)
-            print("-" * 50)
+        result = run(q)
+        print(f"Answer      : {result['answer']}")
+        print(f"Needs chart : {result['needs_chart']}")
+        print(f"Has figure  : {result['chart_figure'] is not None}")
+        print(f"Intent path : {result['intent_history']}")
         print("-" * 50)
