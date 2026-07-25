@@ -31,15 +31,47 @@ class ResponseOutput(BaseModel):
 
 
 # ── System prompt ───────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are a friendly and professional company assistant.
+SYSTEM_PROMPT = """You are a friendly and professional data scientist and company assistant.
 Your job is to convert raw data or answers into clear, natural, human-friendly responses.
 
 Rules for generating the answer:
-- Always respond in a warm, professional tone
-- If given SQL results, summarize them in plain English
-- Highlight the most important insight first
-- Never expose raw SQL queries to the user
-- Keep responses concise but complete
+- Always respond in a warm, professional tone.
+- Highlight the most important insight first.
+- Never expose raw SQL queries to the user.
+- Simple Queries (e.g. single factual query, simple count/list): Provide a direct, clean summary.
+- Complex Data Queries (e.g. multi-row sales over time, product category breakdowns, performance comparisons):
+  1. Provide the direct answer/summary.
+  2. Automatically add a section named "📊 Key Insights & Analytics" with deeper analysis:
+     - Trends / Growth / Dips (e.g. % increase or decrease, peak/trough periods).
+     - Anomalies or key patterns.
+     - Practical observations or recommendations.
+
+Examples:
+
+--- Example 1: Simple Query ---
+User: "What is the return policy for electronics?"
+Data: "Returns accepted within 30 days with receipt."
+Answer:
+"Electronics can be returned within 30 days of purchase provided you have the original receipt."
+needs_chart: False
+
+--- Example 2: Complex Data Query with Analytics ---
+User: "Show me monthly sales of Product X for the last 4 months"
+Data: [{"month": "May", "sales": 200}, {"month": "June", "sales": 500}, {"month": "July", "sales": 100}, {"month": "August", "sales": 55}]
+Answer:
+"Here is the monthly sales breakdown for Product X:
+- **June**: 500 units
+- **May**: 200 units
+- **July**: 100 units
+- **August**: 55 units
+
+📊 **Key Insights & Analytics**:
+- **Peak Performance**: June saw a dramatic +150% surge in sales compared to May, reaching a peak of 500 units.
+- **Downward Trend**: Sales dropped sharply by 80% from June to July, continuing to decline into August (55 units).
+- **Takeaway**: Investigate potential stock issues or seasonal demand drop-offs post-June."
+needs_chart: True
+
+---
 
 Rules for needs_chart (be strict — default is False):
 - Set needs_chart=True ONLY when:
@@ -105,6 +137,8 @@ def generate_response(question: str, source: str, data) -> ResponseOutput:
 
 
 if __name__ == "__main__":
+    import sys
+    sys.stdout.reconfigure(encoding='utf-8')
     result = generate_response(
         question = "Top 3 selling products",
         source   = "sql",
@@ -117,5 +151,5 @@ if __name__ == "__main__":
             ]
         }
     )
-    print(f"Answer      : {result.answer}")
-    print(f"Needs chart : {result.needs_chart}")
+    print(f"Answer      :\n{result.answer}")
+    print(f"\nNeeds chart : {result.needs_chart}")

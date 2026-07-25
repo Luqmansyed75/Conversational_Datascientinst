@@ -1,40 +1,48 @@
 from langgraph.graph import StateGraph, START, END
 
-from graph.state           import AgentState
-from agents.router         import route, check_sufficiency
-from agents.rag_agent      import run_rag_agent
-from agents.sql_agent      import run_sql_agent
-from agents.response_agent import generate_response
-from agents.vis_agent      import run_viz_agent
+from graph.state import AgentState
+from agents  import route, check_sufficiency, run_rag_agent, run_sql_agent, generate_response, run_viz_agent
 
 MAX_ITERATIONS = 3
 
 
 def router_node(state: AgentState) -> AgentState:
-    has_rag   = bool(state.get("rag_context"))
-    has_sql   = bool(state.get("sql_data"))
-    iteration = state.get("iteration", 0)
+    sql_data    = state.get("sql_data")
+    rag_context = state.get("rag_context")
+    iteration   = state.get("iteration", 0)
+
+    # Distinguish between "node ran" and "node returned data"
+    sql_was_run  = sql_data is not None
+    has_sql      = bool(sql_data and sql_data.get("results"))
+    has_rag      = bool(rag_context)
 
     if iteration >= MAX_ITERATIONS:
         curr_intent = "ready"
+
+    elif sql_was_run and not has_sql:
+        # SQL ran but returned empty rows — no point retrying
+        curr_intent = "ready"
+
     elif has_rag and has_sql:
         curr_intent = "ready"
+
     elif has_rag or has_sql:
+        # Some data collected — check if it's enough
         curr_intent = check_sufficiency(
             state["question"],
-            state.get("sql_data", {}).get("results"),
-            state.get("rag_context", {}).get("context") if state.get("rag_context") else None,
+            sql_data,
+            rag_context,
         )
+
     else:
+        # First visit — classify intent
         curr_intent = route(state["question"])
 
-    state["intent"] = curr_intent
-
-    history = list(state.get("intent_history") or [])
-    history.append(curr_intent)
-    state["intent_history"] = history
-    state["iteration"]      = iteration + 1
+    state["intent"]        = curr_intent
+    state["iteration"]     = iteration + 1
+    state["intent_history"] = list(state.get("intent_history") or []) + [curr_intent]
     return state
+
 
 
 def rag_node(state: AgentState) -> AgentState:
@@ -155,12 +163,13 @@ def run(question: str, chat_history: list = []) -> dict:
         "needs_chart":   state["needs_chart"],
         "chart_figure":  state["chart_figure"],
         "intent_history": state["intent_history"],
+        "sql_res":state["sql_data"]
     }
 
 
 if __name__ == "__main__":
     tests = [
-        "Show me the top 5 costly products of our company in a bar chart",
+        "Show me the last 5 months sales of electronics products",
     ]
 
     for q in tests:
@@ -170,4 +179,5 @@ if __name__ == "__main__":
         print(f"Needs chart : {result['needs_chart']}")
         print(f"Has figure  : {result['chart_figure'] is not None}")
         print(f"Intent path : {result['intent_history']}")
+        print(f"sql_res : {result['sql_res']}")
         print("-" * 50)
