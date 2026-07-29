@@ -1,5 +1,105 @@
-v2
+v2 (Analysis)
 1.analytics agent
 2.vis agent
 3.handling complex queries (rag and sql) [done]
 (pb1:sql res is not present in the db but it has to answer from rag docs)
+------------------------------------------------------------------
+Conversation Data Scientist Engine
+            │
+            ▼
+Create FastAPI routes
+            │
+            ▼
+Test thoroughly using /docs
+            │
+            ▼
+Fix all backend issues
+            │
+            ▼
+Create Streamlit chatbot UI
+            │
+            ▼
+Replace direct function calls with HTTP requests
+            │
+            ▼
+Test the complete application
+--------------------------------------------------
+I want to build an **interactive Streamlit frontend** for my existing **Conversational Data Scientist** project.
+
+**Important Instructions:**
+
+* Do **NOT** overwrite or modify any existing backend logic unless absolutely necessary.
+* The current backend (LangGraph agents, RAG, SQL, Analytics, etc.) should remain untouched.
+* Focus only on designing and implementing the frontend incrementally.
+* Before implementing anything, first analyze the existing project structure and explain where the new frontend components should fit.
+* If any required information is missing, **ask me questions first instead of making assumptions.**
+
+## Goal
+
+Build a clean ChatGPT-like Streamlit interface.
+
+## Phase 1 Features
+
+### 1. Chat Input
+
+* Chat input box at the bottom.
+* User sends messages by pressing Enter.
+* Messages appear immediately in the chat window.
+* Assistant responses stream naturally if supported.
+
+### 2. Sidebar
+
+Implement a left sidebar containing:
+
+* **New Chat** button at the top.
+* List of previous conversations below it.
+* Each conversation should display a generated title (for now, use the first user message as the title).
+* Clicking a chat loads its entire conversation.
+* Highlight the currently selected conversation.
+
+## UI Requirements
+
+Main Area:
+
+* Chat history
+* User messages
+* Assistant messages
+* Chat input
+
+Sidebar:
+
+* New Chat button
+* Conversation list
+* Current chat indicator
+
+## Conversation Management
+
+Design a conversation manager that supports:
+
+* Multiple chat sessions
+* Unique chat IDs
+* Chat title
+* Created timestamp
+* Last updated timestamp
+* Full message history
+
+Do not implement a database yet if unnecessary. If Streamlit session state is sufficient for Phase 1, use that and explain why.
+
+## Code Quality
+
+* Keep frontend and backend separated.
+* Create reusable components where appropriate.
+* Do not mix UI code with LangGraph logic.
+* Follow a modular folder structure.
+
+## Deliverables
+
+Before writing code:
+
+1. Analyze my current project structure.
+2. Explain the implementation plan step by step.
+3. Mention any files that will be created or modified.
+4. Explain why each change is needed.
+5. Ask for confirmation before making structural changes.
+
+Only after the plan is approved should implementation begin.

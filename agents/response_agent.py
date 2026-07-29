@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -90,12 +90,14 @@ Rules for needs_chart (be strict — default is False):
 
 
 # ── Main entry point ────────────────────────────────────────────────────────
-def generate_response(question: str, source: str, data) -> ResponseOutput:
+def generate_response(question: str, source: str, data, chat_history: list = []) -> ResponseOutput:
     """
     Args:
-        question : original user question
-        source   : 'rag', 'sql', 'both', or 'general'
-        data     : dict with sql/rag results, or None for general
+        question     : original user question
+        source       : 'rag', 'sql', 'both', or 'general'
+        data         : dict with sql/rag results, or None for general
+        chat_history : list of LangChain message objects (HumanMessage/AIMessage)
+                       restored automatically by the add_messages reducer + checkpointer
 
     Returns:
         ResponseOutput with 'answer' (str) and 'needs_chart' (bool)
@@ -130,9 +132,12 @@ def generate_response(question: str, source: str, data) -> ResponseOutput:
 
     structured_llm = llm.with_structured_output(ResponseOutput)
 
+    # Inject full conversation history between system prompt and current question
+    # chat_history is already a list of HumanMessage/AIMessage objects
     return structured_llm.invoke([
         SystemMessage(content=SYSTEM_PROMPT),
-        HumanMessage(content=user_content),
+        *chat_history,                        # ← previous turns
+        HumanMessage(content=user_content),   # ← current question
     ])
 
 
