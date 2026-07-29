@@ -132,11 +132,15 @@ def generate_response(question: str, source: str, data, chat_history: list = [])
 
     structured_llm = llm.with_structured_output(ResponseOutput)
 
-    # Inject full conversation history between system prompt and current question
-    # chat_history is already a list of HumanMessage/AIMessage objects
+    # Keep only the last 4 messages (2 turns) to stay within Groq's 12k token limit
+    # (system prompt + SQL results consume most of the budget)
+    MAX_HISTORY = 4
+    trimmed_history = chat_history[-MAX_HISTORY:] if len(chat_history) > MAX_HISTORY else chat_history
+
+    # Inject trimmed history between system prompt and current question
     return structured_llm.invoke([
         SystemMessage(content=SYSTEM_PROMPT),
-        *chat_history,                        # ← previous turns
+        *trimmed_history,                     # ← last 5 turns
         HumanMessage(content=user_content),   # ← current question
     ])
 

@@ -54,7 +54,10 @@ def rag_node(state: AgentState) -> dict:
 
 
 def sql_node(state: AgentState) -> dict:
-    return {"sql_data": run_sql_agent(state["question"])}
+    return {"sql_data": run_sql_agent(
+        question     = state["question"],
+        chat_history = state.get("chat_history", []),
+    )}
 
 
 def response_node(state: AgentState) -> dict:
@@ -100,7 +103,8 @@ def viz_node(state: AgentState) -> dict:
         question = state["question"],
         sql_data = state["sql_data"],
     )
-    return {"chart_figure": fig}
+    # Serialize to JSON string — go.Figure is not msgpack serializable
+    return {"chart_figure": fig.to_json() if fig else None}
 
 
 def route_edge(state: AgentState) -> str:
@@ -173,30 +177,39 @@ def run(question: str, thread_id: str, chat_history: list = []) -> dict:
         "iteration":      0,
     }, config=config)
     return {
-        "answer":        state["final_answer"],
-        # "needs_chart":   state["needs_chart"],
-        # "chart_figure":  state["chart_figure"],
-        # "intent_history": state["intent_history"],
-        # "sql_res":       state["sql_data"]
-        "history": state["chat_history"]
+        "answer":         state["final_answer"],
+        "needs_chart":    state["needs_chart"],
+        "has_chart":      state["chart_figure"] is not None,
+        "chart_figure":   state["chart_figure"],
+        "intent_history": state["intent_history"],
+        "sql_res":        state["sql_data"],
+        "chat_history":   state["chat_history"],
     }
 
 
 if __name__ == "__main__":
     # Use the same thread_id across questions to test multi-turn memory
-    thread_id = "test-thread-2"
+    thread_id = "test-thread-6"
     tests = [
-        "Hi this is Luqman",
-        "What is my name?",
+        "What are the top 3 selling products?",
+        "And add the total cost of these products?",
+        # "What was the total revenue for last quarter?",
+        # "Can you compare that to the previous quarter?",
+        # "What are the top 5 customers by revenue?",
+        # "Can you show me a chart of their purchase history?",
+        # "What is the average order value for these customers?",
+        # "Can you provide a summary of the sales performance for this year?",
     ]
 
     for q in tests:
-        print(f"\nQ: {q}")
+        print(f"\n{'='*60}")
+        print(f"Q: {q}")
+        print(f"{'='*60}")
         result = run(q, thread_id=thread_id)
-        print(f"Answer      : {result['answer']}")
-        print(f"history : {result['history']}")
-        # print(f"Needs chart : {result['needs_chart']}")
-        # print(f"Has figure  : {result['chart_figure'] is not None}")
-        # print(f"Intent path : {result['intent_history']}")
-        # print(f"sql_res : {result['sql_res']}")
-        # print("-" * 50)
+        print(f"Answer       : {result['answer']}")
+        # print(f"Needs chart  : {result['needs_chart']}")
+        # print(f"Has chart    : {result['has_chart']}")
+        # print(f"Intent path  : {result['intent_history']}")
+        #print(f"SQL results  : {result['sql_res']}")
+        print(f"Chat history : {result['chat_history']}")
+        # print(f"Chart JSON   : {'<present>' if result['chart_figure'] else None}")

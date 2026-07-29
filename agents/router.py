@@ -52,12 +52,16 @@ def route(question: str) -> str:
 
 
 def check_sufficiency(question: str, sql_data, rag_context) -> str:
+    # Truncate to preview only — check_sufficiency only needs to know IF data exists
+    sql_preview = str(sql_data)[:300] + "..." if sql_data and len(str(sql_data)) > 300 else str(sql_data or "None")
+    rag_preview = str(rag_context)[:300] + "..." if rag_context and len(str(rag_context)) > 300 else str(rag_context or "None")
+
     response = client.chat.completions.create(
         model       = MODEL,
         messages    = [{"role": "user", "content": SUFFICIENCY_PROMPT.format(
             question    = question,
-            sql_data    = sql_data or "None",
-            rag_context = rag_context or "None",
+            sql_data    = sql_preview,
+            rag_context = rag_preview,
         )}],
         temperature = 0,
         max_tokens  = 10,

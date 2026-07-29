@@ -103,3 +103,6 @@ Before writing code:
 5. Ask for confirmation before making structural changes.
 
 Only after the plan is approved should implementation begin.
+----------------------------------------------------------------
+remember this for implementing chart in the frontendimport plotly.io as pio
+fig = pio.from_json(chart_figure_string)

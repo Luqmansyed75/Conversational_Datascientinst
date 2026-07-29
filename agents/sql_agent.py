@@ -70,13 +70,21 @@ def get_schema() -> str:
     return "\n\n".join(schema)
 
 
-def generate_sql(question: str, schema: str) -> str:
+def generate_sql(question: str, schema: str, chat_history: list = []) -> str:
+    # Build conversation messages: system + history + current question
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Inject last 4 messages of chat history for context (e.g. "these products")
+    for msg in chat_history[-4:]:
+        role = "user" if msg.type == "human" else "assistant"
+        messages.append({"role": role, "content": msg.content})
+
+    # Current question with schema
+    messages.append({"role": "user", "content": f"Schema:\n{schema}\n\nQuestion: {question}\n\nSQL:"})
+
     response = client.chat.completions.create(
-        model    = MODEL,
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": f"Schema:\n{schema}\n\nQuestion: {question}\n\nSQL:"},
-        ],
+        model       = MODEL,
+        messages    = messages,
         temperature = 0,
     )
     raw = response.choices[0].message.content.strip()
@@ -99,9 +107,9 @@ def execute_sql(sql: str) -> list[dict]:
     return [dict(zip(cols, row)) for row in rows]
 
 
-def run_sql_agent(question: str) -> dict:
+def run_sql_agent(question: str, chat_history: list = []) -> dict:
     schema  = get_schema()
-    sql     = generate_sql(question, schema)#write the query
+    sql     = generate_sql(question, schema, chat_history)
     results = execute_sql(sql)
     return {"sql": sql, "results": results}
 

@@ -1,8 +1,16 @@
 from fastapi import APIRouter
 from api.schemas.chat_schema import ChatRequest, ChatResponse
 from graph.graph import run
+from utils.chat_thread import generate_thread_id
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
+
+@router.post("/new-thread")
+def new_thread():
+    """Create a new conversation thread and return its ID."""
+    thread_id = generate_thread_id()
+    return {"thread_id": thread_id}
 
 
 @router.post("/ask", response_model=ChatResponse)
