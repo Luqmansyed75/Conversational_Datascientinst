@@ -50,7 +50,8 @@ Forbidden statements include:
 27. Do not rename tables or columns unless using SQL aliases.
 28. Prefer readable and efficient SQL over unnecessarily complex queries.
 29. Avoid nested subqueries when a JOIN or CTE provides a clearer solution.
-30. Ensure every generated query is executable without modification."""
+30. Ensure every generated query is executable without modification.
+31. When the user's question is a follow-up or references previously mentioned items (e.g., 'these products', 'show these in a chart', 'for them'), examine the conversation history carefully. Filter the SQL query specifically for those exact items using WHERE (e.g., WHERE product_name IN (...)) or apply the exact LIMIT N from the previous context. Never select the entire table when follow-up items are referenced."""
 
 
 def get_schema() -> str:

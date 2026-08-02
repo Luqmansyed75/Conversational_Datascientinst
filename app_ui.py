@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import plotly.io as pio
 
 API_BASE = "http://127.0.0.1:8000"
 
@@ -72,15 +73,39 @@ div[data-testid="stButton"] button:hover {
     background-color: #2a2a2a !important;
     color: #e5e2e1 !important;
 }
+
+/* Active Thread Highlight */
 .thread-btn-active button {
-    background: #201f1f !important;
-    color: #e5e2e1 !important;
-    border-left: 3px solid #c0392b !important;
+    background: linear-gradient(90deg, rgba(192, 57, 43, 0.35) 0%, rgba(32, 31, 31, 0.95) 100%) !important;
+    color: #ffffff !important;
+    border-left: 4px solid #c0392b !important;
     border-radius: 0 8px 8px 0 !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
     font-size: 14px !important;
     padding: 10px 12px !important;
     margin-bottom: 4px !important;
+    box-shadow: 0 2px 10px rgba(192, 57, 43, 0.3) !important;
+}
+
+/* Minimalist Lucide Trash-2 Icon Button */
+.delete-btn button {
+    background-color: transparent !important;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23a88a85" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>') !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    border: none !important;
+    color: transparent !important;
+    width: 34px !important;
+    height: 38px !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease-in-out !important;
+    box-shadow: none !important;
+}
+.delete-btn button:hover {
+    background-color: rgba(192, 57, 43, 0.25) !important;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23ffb4a9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>') !important;
+    transform: scale(1.05) !important;
 }
 
 /* ── Main Canvas Background ── */
@@ -234,6 +259,18 @@ section.main > div { background-color: #0e0e0e !important; }
 # ─── Session State ────────────────────────────────────────────────────────────
 if "conversations" not in st.session_state:
     st.session_state.conversations = []
+    try:
+        resp = requests.get(f"{API_BASE}/chat/threads", timeout=5)
+        if resp.status_code == 200:
+            threads = resp.json().get("threads", [])
+            for t in threads:
+                st.session_state.conversations.append({
+                    "thread_id": t["thread_id"],
+                    "title":     t["title"],
+                    "messages":  [],  # messages loaded lazily on click
+                })
+    except Exception:
+        pass
 
 if "active_thread" not in st.session_state:
     st.session_state.active_thread = None
@@ -263,6 +300,25 @@ def api_ask(question: str, thread_id: str) -> dict:
         return {"answer": f"⚠️ Connection error with backend: {e}", "needs_chart": False, "has_chart": False}
 
 
+def api_get_history(thread_id: str) -> list[dict]:
+    """Fetch chat history from Postgres via the backend API."""
+    try:
+        resp = requests.get(f"{API_BASE}/chat/history/{thread_id}", timeout=10)
+        resp.raise_for_status()
+        return resp.json().get("messages", [])
+    except Exception:
+        return []
+
+
+def api_delete_thread(thread_id: str) -> bool:
+    """Delete all checkpoint data for a thread via the backend API."""
+    try:
+        resp = requests.delete(f"{API_BASE}/chat/thread/{thread_id}", timeout=10)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
 # ─── Actions ─────────────────────────────────────────────────────────────────
 def start_new_chat():
     thread_id = api_create_thread()
@@ -280,6 +336,28 @@ def get_active_conv() -> dict | None:
         if conv["thread_id"] == st.session_state.active_thread:
             return conv
     return None
+
+
+def switch_to_thread(thread_id: str):
+    """Set active thread and auto-load history from Postgres if not in session_state."""
+    st.session_state.active_thread = thread_id
+    # Find the conversation
+    for conv in st.session_state.conversations:
+        if conv["thread_id"] == thread_id:
+            # Only fetch from Postgres if messages not already loaded in RAM
+            if not conv["messages"]:
+                conv["messages"] = api_get_history(thread_id)
+            break
+
+
+def remove_thread(thread_id: str):
+    """Delete from Postgres and remove from session_state."""
+    api_delete_thread(thread_id)
+    st.session_state.conversations = [
+        c for c in st.session_state.conversations if c["thread_id"] != thread_id
+    ]
+    if st.session_state.active_thread == thread_id:
+        st.session_state.active_thread = None
 
 
 # ─── Sidebar UI ───────────────────────────────────────────────────────────────
@@ -303,18 +381,28 @@ with st.sidebar:
 
     st.markdown('<div class="history-label">History</div>', unsafe_allow_html=True)
 
-    # Conversation History List
+    # Conversation History List with delete button
     for conv in reversed(st.session_state.conversations):
         is_active = conv["thread_id"] == st.session_state.active_thread
         title     = conv["title"]
-        label     = (title[:26] + "…") if len(title) > 26 else title
+        label     = (title[:22] + "…") if len(title) > 22 else title
         css_class = "thread-btn-active" if is_active else "thread-btn"
 
-        st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
-        if st.button(f"💬  {label}", key=f"t_{conv['thread_id']}", use_container_width=True):
-            st.session_state.active_thread = conv["thread_id"]
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+        col1, col2 = st.columns([5, 1], gap="small")
+
+        with col1:
+            st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+            if st.button(f"💬  {label}", key=f"t_{conv['thread_id']}", use_container_width=True):
+                switch_to_thread(conv["thread_id"])
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with col2:
+            st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
+            if st.button(" ", key=f"del_{conv['thread_id']}", help="Delete conversation"):
+                remove_thread(conv["thread_id"])
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ─── Main Area UI ─────────────────────────────────────────────────────────────
@@ -347,6 +435,10 @@ else:
         avatar = "🤖" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
+            # Re-render chart if it was stored with this message
+            if msg.get("chart_json"):
+                fig = pio.from_json(msg["chart_json"])
+                st.plotly_chart(fig, use_container_width=True)
 
     # Chat Input Box
     if prompt := st.chat_input("Ask me anything about your data..."):
@@ -373,11 +465,22 @@ else:
             """, unsafe_allow_html=True)
 
             # Call FastAPI Backend Endpoint
-            result = api_ask(prompt, active_conv["thread_id"])
-            answer = result.get("answer") or "⚠️ No response received from server."
+            result  = api_ask(prompt, active_conv["thread_id"])
+            answer  = result.get("answer") or "⚠️ No response received from server."
+            has_chart   = result.get("has_chart", False)
+            chart_json  = result.get("chart_figure")
 
             # Update with Assistant Answer
             placeholder.markdown(answer)
 
-        active_conv["messages"].append({"role": "assistant", "content": answer})
+            # Render chart if present
+            if has_chart and chart_json:
+                fig = pio.from_json(chart_json)
+                st.plotly_chart(fig, use_container_width=True)
+
+        active_conv["messages"].append({
+            "role":        "assistant",
+            "content":     answer,
+            "chart_json":  chart_json if has_chart else None,
+        })
         st.rerun()

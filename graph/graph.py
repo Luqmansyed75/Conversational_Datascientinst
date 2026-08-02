@@ -188,6 +188,8 @@ def run(question: str, thread_id: str, chat_history: list = []) -> dict:
 
 
 if __name__ == "__main__":
+    import sys
+    sys.stdout.reconfigure(encoding='utf-8')
     # Use the same thread_id across questions to test multi-turn memory
     thread_id = "test-thread-6"
     tests = [

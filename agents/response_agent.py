@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -11,33 +12,28 @@ llm = ChatGroq(
     temperature=0.3,
 )
 
+
 # ── Structured output schema ────────────────────────────────────────────────
 class ResponseOutput(BaseModel):
     """LLM returns both the answer and chart decision in one call."""
-    answer      : str  = Field(description="Natural language response to the user's question.")
-    needs_chart : bool = Field(
-        description=(
-            "Set True ONLY when BOTH conditions are met: "
-            "(1) SQL data is available, AND "
-            "(2) EITHER the user explicitly requests a chart/graph/visualization/plot, "
-            "OR the question contains trend/comparison language such as: "
-            "'show me', 'trend', 'over time', 'monthly', 'yearly', 'daily', "
-            "'increased', 'decreased', 'compare', 'last N months', 'per month', "
-            "'distribution', 'growth'. "
-            "Set False for all other cases — including single values, "
-            "RAG-only answers, policy questions, and general questions."
-        )
-    )
+    answer      : str  = Field(default="", description="Natural language response to the user's question.")
+    needs_chart : bool = Field(default=False, description="Set True ONLY when chart/trend language is present and SQL data is available.")
 
 
 # ── System prompt ───────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are a friendly and professional data scientist and company assistant.
 Your job is to convert raw data or answers into clear, natural, human-friendly responses.
 
-Rules for generating the answer:
+Output Requirements:
+You must provide a JSON object with two fields:
+1. "answer": The natural language markdown string for the user.
+2. "needs_chart": A boolean (true or false).
+
+Rules for generating the "answer" string:
 - Always respond in a warm, professional tone.
 - Highlight the most important insight first.
 - Never expose raw SQL queries to the user.
+- Do NOT output literal JSON, backticks, or field names like `{"answer": ...}` inside the "answer" text itself.
 - Simple Queries (e.g. single factual query, simple count/list): Provide a direct, clean summary.
 - Complex Data Queries (e.g. multi-row sales over time, product category breakdowns, performance comparisons):
   1. Provide the direct answer/summary.
@@ -46,35 +42,8 @@ Rules for generating the answer:
      - Anomalies or key patterns.
      - Practical observations or recommendations.
 
-Examples:
-
---- Example 1: Simple Query ---
-User: "What is the return policy for electronics?"
-Data: "Returns accepted within 30 days with receipt."
-Answer:
-"Electronics can be returned within 30 days of purchase provided you have the original receipt."
-needs_chart: False
-
---- Example 2: Complex Data Query with Analytics ---
-User: "Show me monthly sales of Product X for the last 4 months"
-Data: [{"month": "May", "sales": 200}, {"month": "June", "sales": 500}, {"month": "July", "sales": 100}, {"month": "August", "sales": 55}]
-Answer:
-"Here is the monthly sales breakdown for Product X:
-- **June**: 500 units
-- **May**: 200 units
-- **July**: 100 units
-- **August**: 55 units
-
-📊 **Key Insights & Analytics**:
-- **Peak Performance**: June saw a dramatic +150% surge in sales compared to May, reaching a peak of 500 units.
-- **Downward Trend**: Sales dropped sharply by 80% from June to July, continuing to decline into August (55 units).
-- **Takeaway**: Investigate potential stock issues or seasonal demand drop-offs post-June."
-needs_chart: True
-
----
-
-Rules for needs_chart (be strict — default is False):
-- Set needs_chart=True ONLY when:
+Rules for "needs_chart":
+- Set needs_chart = true ONLY when:
     1. The user explicitly asks for a chart, graph, plot, or visualization
     OR
     2. The question contains trend/time-series/comparison language:
@@ -82,11 +51,7 @@ Rules for needs_chart (be strict — default is False):
             'last N months', 'increased', 'decreased', 'compare', 'per month',
             'distribution', 'growth', 'breakdown'
     AND SQL data with multiple rows is available.
-- Set needs_chart=False when:
-    - The answer is a single value (e.g. 'total revenue is $5000')
-    - The question is about policies, FAQs, or documents (RAG)
-    - The question is general or conversational
-    - No SQL data is available"""
+- Set needs_chart = false for all other cases."""
 
 
 # ── Main entry point ────────────────────────────────────────────────────────
@@ -97,7 +62,6 @@ def generate_response(question: str, source: str, data, chat_history: list = [])
         source       : 'rag', 'sql', 'both', or 'general'
         data         : dict with sql/rag results, or None for general
         chat_history : list of LangChain message objects (HumanMessage/AIMessage)
-                       restored automatically by the add_messages reducer + checkpointer
 
     Returns:
         ResponseOutput with 'answer' (str) and 'needs_chart' (bool)
@@ -132,17 +96,22 @@ def generate_response(question: str, source: str, data, chat_history: list = [])
 
     structured_llm = llm.with_structured_output(ResponseOutput)
 
-    # Keep only the last 4 messages (2 turns) to stay within Groq's 12k token limit
-    # (system prompt + SQL results consume most of the budget)
+    # Keep only the last 4 messages (2 turns) to stay within Groq's token limit
     MAX_HISTORY = 4
     trimmed_history = chat_history[-MAX_HISTORY:] if len(chat_history) > MAX_HISTORY else chat_history
 
-    # Inject trimmed history between system prompt and current question
-    return structured_llm.invoke([
+    res = structured_llm.invoke([
         SystemMessage(content=SYSTEM_PROMPT),
-        *trimmed_history,                     # ← last 5 turns
-        HumanMessage(content=user_content),   # ← current question
+        *trimmed_history,
+        HumanMessage(content=user_content),
     ])
+
+    # Clean up any accidental JSON metadata string appended by the LLM inside answer
+    if res and res.answer:
+        res.answer = re.sub(r'\s*\{"answer".*\}$', '', res.answer, flags=re.DOTALL).strip()
+        res.answer = re.sub(r'\s*\{"needs_chart".*\}$', '', res.answer, flags=re.DOTALL).strip()
+
+    return res
 
 
 if __name__ == "__main__":
@@ -160,5 +129,5 @@ if __name__ == "__main__":
             ]
         }
     )
-    print(f"Answer      :\n{result.answer}")
-    print(f"\nNeeds chart : {result.needs_chart}")
+    print("Answer      :", result.answer)
+    print("Needs chart :", result.needs_chart)
